@@ -81,12 +81,41 @@ wa = stateWeight.afterGamma
 wb = stateWeight.beforeGamma
 
 {-
+-Symmetry group functions
+-}
+shiftSymGroup :: Slices -> [Slices]
+shiftSymGroup ls = take 4 $ iterate (fmap ((flip rotateL) 4)) ls
+
+rotateList :: Int -> [a] -> [a]
+rotateList _ [] = []
+rotateList n xs = zipWith const (drop n (cycle xs)) xs
+
+sliceSymGroup :: Int -> Slices -> [Slices]
+sliceSymGroup i ls = take i $ iterate (rotateList 1) ls
+
+symGroup :: Int -> Slices -> [Slices]
+symGroup i ls = concatMap (sliceSymGroup i) (shiftSymGroup ls)
+
+isZmin :: Int -> Slices -> Bool
+isZmin i filled = let 
+                      sym    = symGroup i filled
+                      zmin   = maximum sym
+                  in  filled == zmin
+{-
 -Predicates
 -}
 fill :: (Num a ) => Int -> [a] -> [a]
 fill n ls = take n $ ls ++ repeat 0
 
-validWeight n input =let s  = fill 4 input
-                         s' = slicesToState s
+validWeight n filled =let
+                         s' = slicesToState filled
                          w  = wa s' + wb s' 
-                     in n >= w && w > 0  
+                      in n >= w && w > 0  
+
+isValid slices = let filled = fill 4 slices
+                 in  (isZmin 4 filled) && (validWeight 7 filled)
+
+
+
+
+
