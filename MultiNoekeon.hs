@@ -2,6 +2,7 @@ module MultiNoekeon where
 import Data.Word
 import Data.Bits
 import Text.Printf
+import Data.List
 import qualified Data.Vector as Vec
 
 type Noekeon a = (a,a,a,a)
@@ -66,7 +67,13 @@ theta (a,b,c,d) = let temp1 = a `xor` c
 rotateState :: (Int,Int,Int,Int) -> Noekeon Word16 -> Noekeon Word16
 rotateState (r1,r2,r3,r4) (a,b,c,d) = (a,b `rotateR` r2,c `rotateR` r3,d `rotateR` r4)
 
+rotateState' :: (Int,Int,Int,Int) -> Noekeon Word16 -> Noekeon Word16
+rotateState' (r1,r2,r3,r4) (a,b,c,d) = (a,b `rotateL` r2,c `rotateL` r3,d `rotateL` r4)
+
 defaultRotate = rotateState (0,1,5,2)
+defaultRotate' = rotateState' (0,1,5,2)
+
+cipher = defaultRotate.theta.defaultRotate'
 
 afterGamma  = defaultRotate
 beforeGamma = defaultRotate.theta
@@ -101,6 +108,11 @@ isZmin i filled = let
                       sym    = symGroup i filled
                       zmin   = maximum sym
                   in  filled == zmin
+
+{-
+Performance
+-}
+
 {-
 -Predicates
 -}
@@ -113,9 +125,57 @@ validWeight n filled =let
                       in n >= w && w > 0  
 
 isValid slices = let filled = fill 4 slices
-                 in  (isZmin 4 filled) && (validWeight 7 filled)
+                 in (validWeight 8 filled) && (isZmin 4 filled)  
+
+{--
+Cols
+--}
 
 
 
+getBit     :: (Bits a) => Int -> a-> a
+getBit i n = let b = bit i .&. n
+             in  b `shiftR` i
 
+getCol :: (Bits a) =>  Noekeon a -> Int  -> a
+getCol (a0,a1,a2,a3) i = let    a = getBit i a0
+                                b = getBit i a1 `shiftL`1
+                                c = getBit i a2 `shiftL`2
+                                d = getBit i a3 `shiftL`3
+                         in  a.|.b.|.c.|.d 
+getCols :: (Bits a) =>Noekeon a -> [a]
+getCols n = fmap (getCol n) [0..15]
 
+getStateRow  :: [Word16] -> Int -> Word16
+getStateRow n i =  foldr1 (.|.) $Vec.imap (flip shiftL) (Vec.fromList $fmap (getBit i) n)
+getStateRows :: [Word16] -> Noekeon Word16
+getStateRows n = (getStateRow n 0,getStateRow n 1,getStateRow n 2, getStateRow n 3)
+
+{-
+-- trail props
+-}
+
+getProps :: Word16 -> [Word16]
+getProps 0   = [0]
+getProps 1   = [0xC,0xD,0xE,0xF]
+getProps 2   = [4,8,5,6,7,0xB]
+getProps 4   = [2,4,8,3,6,0xA,0xC,0xD]
+getProps 8   = [2,4,3,5,6,7]
+getProps 3   = [4,8,5,6,7,0xB]
+getProps 5   = [2,8,3,5,0xA,7,0xE,0xF]
+getProps 6   = [2,4,8,3,6,0xA,0xE,0xF]
+getProps 9   = [9,0xC,0xB,0xD,0xE,0xF]
+getProps 0xA = [4,5,6,0xC,7,0xD,0xE,0xF]
+getProps 0xC = [1,4,9,0xA,7,0xE]
+getProps 7   = [2,8,3,5,0xA,0xC,7,0xD]
+getProps 0xB = [2,3,9,0xB]
+getProps 0xD = [1,4,9,0xA,7,0xD]
+getProps 0xE = [1,5,6,9,0xA,0xC]
+getProps 0xF = [1,5,6,9,0xA,0xF]
+
+extPredic :: Int -> Noekeon Word16 -> Bool
+extPredic i n = stateWeight n < i
+
+extendRound :: Int ->Noekeon Word16 -> [Noekeon Word16]
+extendRound i n = filter (extPredic i) $fmap (cipher.getStateRows) $ mapM getProps (getCols n)
+ 
