@@ -3,6 +3,7 @@ import Data.Word
 import Data.Bits
 import Text.Printf
 import Data.List
+import Control.Parallel.Strategies
 import qualified Data.Vector as Vec
 
 type Noekeon a = (a,a,a,a)
@@ -173,9 +174,130 @@ getProps 0xD = [1,4,9,0xA,7,0xD]
 getProps 0xE = [1,5,6,9,0xA,0xC]
 getProps 0xF = [1,5,6,9,0xA,0xF]
 
+getRW :: Word16 -> Word16 -> Word16
+getRW _ 0    = 0
+getRW  0 _   = 0
+getRW 1 0xC = 2
+getRW  1  0xD  = 2
+getRW  1  0xE  = 2
+getRW  1  0xF  = 2
+getRW  2  4    = 3
+getRW  2  8    = 2
+getRW  2  5    = 3
+getRW  2  6    = 3
+getRW  2  7    = 3
+getRW  2  0xB    = 2
+getRW  4  2  = 3
+getRW  4  4  = 3
+getRW  4  8  = 3
+getRW  4  3  = 3
+getRW  4  6  = 3
+getRW  4  0xA  = 3
+getRW  4  0xC  = 3
+getRW  4  0xD  = 3
+getRW  8  2  = 2
+getRW  8  4  = 3
+getRW  8  3  = 2
+getRW  8  5  = 3
+getRW  8  6  = 3
+getRW  8  7  = 3
+getRW  3  4  = 3
+getRW  3  8  = 2
+getRW  3  5  = 3
+getRW  3  6  = 3
+getRW  3  7  = 3
+getRW  3  0xB  = 2
+getRW  5  2  = 3
+getRW  5  8  = 3
+getRW  5  3  = 3
+getRW  5  5  = 3
+getRW  5  0xA  = 3
+getRW  5  7    = 3
+getRW  5  0xE  = 3
+getRW  5  0xF  = 3
+getRW  6  2  = 3
+getRW  6  4  = 3
+getRW  6  8  = 3
+getRW  6  3  = 3
+getRW  6  6  = 3
+getRW  6  0xA  = 3
+getRW  6  0xE  = 3
+getRW  6  0xF  = 3
+getRW  9  0x9  = 2
+getRW  9  0xC  = 3
+getRW  9  0xB  = 2
+getRW  9  0xD  = 3
+getRW  9  0xE  = 3
+getRW  9  0xF  = 3
+getRW  0xA  4  = 3
+getRW  0xA  5  = 3
+getRW  0xA  6  = 3
+getRW  0xA  0xC  = 3
+getRW  0xA  7  = 3
+getRW  0xA  0xD  = 3
+getRW  0xA  0xE  = 3
+getRW  0xA  0xF  = 3
+getRW  0xC  1    = 2
+getRW  0xC  4    = 3
+getRW  0xC  9    = 3
+getRW  0xC  0xA    = 3
+getRW  0xC  7    = 3
+getRW  0xC  0xE    = 2
+getRW  7  2  = 3
+getRW  7  8  = 3
+getRW  7  3  = 3
+getRW  7  5  = 3
+getRW  7  0xA  = 3
+getRW  7  0xC  = 3
+getRW  7  7  = 3
+getRW  7  0xD  = 3
+getRW  0xB  2  = 2
+getRW  0xB  3  = 2
+getRW  0xB  9  = 2
+getRW  0xB  0xB  = 2
+getRW  0xD  1  = 2
+getRW  0xD  4  = 3
+getRW  0xD  9  = 3
+getRW  0xD  0xA  = 3
+getRW  0xD  7  = 3
+getRW  0xD  0xD  = 2
+getRW  0xE  1  = 2
+getRW  0xE  5  = 3
+getRW  0xE  6  = 3
+getRW  0xE  9  = 3
+getRW  0xE  0xA  = 3
+getRW  0xE  0xC  = 2
+getRW  0xF  1  = 2
+getRW  0xF  5  = 3
+getRW  0xF  6  = 3
+getRW  0xF  9  = 3
+getRW  0xF  0xA  = 3
+getRW  0xF  0xF  = 2
+
+
+getRealWeight :: Noekeon Word16 -> Noekeon Word16 -> Word16
+getRealWeight a b = let arow = getCols a
+                        brow = getCols b
+                        ls   = zipWith getRW arow brow
+                    in  sum ls
+
 extPredic :: Int -> Noekeon Word16 -> Bool
 extPredic i n = stateWeight n < i
 
 extendRound :: Int ->Noekeon Word16 -> [Noekeon Word16]
 extendRound i n = filter (extPredic i) $fmap (cipher.getStateRows) $ mapM getProps (getCols n)
+
+{-
+-analisys
+-}
+threeRoundTrail :: Int ->[Noekeon Word16] -> [(Noekeon Word16,Noekeon Word16)]
+threeRoundTrail i n = do secondround <- n
+                         thirdround  <- extendRound i secondround
+                         return (secondround,thirdround)
+
+fourRoundTrail :: [Noekeon Word16] -> [(Noekeon Word16,Noekeon Word16,Noekeon Word16)]
+fourRoundTrail n   = do  secondround    <- n
+                         thirdround     <- extendRound 5 secondround
+                         forthround     <- extendRound 5 thirdround
+                         return (secondround,thirdround,forthround)
  
