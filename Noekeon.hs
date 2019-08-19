@@ -1,10 +1,37 @@
 module Noekeon where
 import Data.Word
 import Data.Bits
+import qualified Data.Vector as Vec
 
 type Shift     = (Int,Int,Int,Int)
 type Noekeon64 = (Word16,Word16,Word16,Word16)
 type Slices64  = (Word16,Word16,Word16,Word16)
+type Slice     =  Word16 
+
+
+sliceMask :: Word16
+sliceMask = 0x1111
+
+deslice :: Int -> Word16 -> Word16
+deslice i n = ((n .&.(sliceMask `shiftL` i))`shiftR`i)
+
+sliceToState :: Word16 -> Noekeon64
+sliceToState n = let a0 = deslice 0 n
+                     a1 = deslice 1 n
+                     a2 = deslice 2 n
+                     a3 = deslice 3 n
+                 in  (a0,a1,a2,a3)
+
+shiftSlice :: Int -> Word16 -> Noekeon64
+shiftSlice i n = let (a0,a1,a2,a3) = sliceToState n
+                 in  (a0 `rotateL` i,a1 `rotateL` i,a2 `rotateL` i,a3 `rotateL` i)
+
+orNoekeon :: Noekeon64 -> Noekeon64 -> Noekeon64
+orNoekeon (a,b,c,d) (e,f,g,h) = ((.|.) a e, (.|.) b f, (.|.) c g, (.|.) d h)
+
+toState :: [Word16] -> Noekeon64
+toState ls = foldl orNoekeon (0,0,0,0) $ Vec.imap shiftSlice (Vec.fromList ls)
+
 
 defaultShift :: Shift
 defaultShift = (0,1,5,2)
@@ -34,3 +61,56 @@ theta (a0,a1,a2,a3) = let t  = xor a0 a2
 
 cipher :: Noekeon64 -> Noekeon64
 cipher = p2 . theta . p1
+
+w2 = p2 . theta
+w1 = p2
+
+fuseState :: Noekeon64 -> Word16
+fuseState (a,b,c,d) = a .|. b .|. c .|. d
+
+weightOfState :: Noekeon64 -> Int
+weightOfState = popCount.fuseState
+
+twoRoundWeight   :: Noekeon64 -> Int
+twoRoundWeight n = weightOfState (w1 n) + weightOfState(w2 n)
+
+isWithinBound :: Int -> Noekeon64 -> Bool
+isWithinBound w n = w >= w' && w' > 0
+                    where w' = twoRoundWeight n 
+
+weightPredicate n = isWithinBound 6 (toState n)
+
+fill :: (Num a ) => Int -> [a] -> [a]
+fill n ls = take n $ ls ++ repeat 0
+
+shiftSymGroup :: [Word16] -> [[Word16]]
+shiftSymGroup ls = take 4 $ iterate (fmap ((flip rotateL) 4)) ls
+
+rotateList :: Int -> [a] -> [a]
+rotateList _ [] = []
+rotateList n xs = zipWith const (drop n (cycle xs)) xs
+
+sliceSymGroup :: Int -> [Word16] -> [[Word16]]
+sliceSymGroup i ls = take i $ iterate (rotateList 1) ls
+
+symGroup :: Int -> [Word16] -> [[Word16]]
+symGroup i ls = concatMap (sliceSymGroup i) (shiftSymGroup ls)
+
+isZmin :: Int -> [Word16] -> Bool
+isZmin i slices = let filled = fill i slices
+                      sym    = symGroup i filled
+                      zmin   = maximum sym
+                  in  filled == zmin
+
+searchPredicate n = weightPredicate n 
+
+getCoord' :: Noekeon64 -> (Int,Int)
+getCoord' n = ( weightOfState$ w1 n,weightOfState$ w2 n)
+
+getCoord = getCoord'.toState
+
+tabulate :: [[Word16]] -> [(Int,Int)]
+tabulate = fmap getCoord
+
+
+

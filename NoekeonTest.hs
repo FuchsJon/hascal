@@ -1,9 +1,14 @@
 import Test.QuickCheck
-import Noekeon
-thetaInverse :: Noekeon64 -> Noekeon64
-thetaInverse = cipher . cipher
+import Data.Word
+import Data.Bits
+import MultiNoekeon
 
-checkInverse :: Noekeon64 -> Bool
-checkInverse input = thetaInverse input == input
 
-main = quickCheck (withMaxSuccess 65535 checkInverse ) 
+translationInverse :: Noekeon Word16 -> Noekeon Word16
+translationInverse =  getStateRows.getCols
+
+checkPredicate :: Noekeon Word16 -> Bool
+checkPredicate input = translationInverse input == input
+
+
+main = quickCheck (withMaxSuccess 65535 checkPredicate ) 
